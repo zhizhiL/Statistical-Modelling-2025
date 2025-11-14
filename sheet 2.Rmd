@@ -1,0 +1,322 @@
+---
+title: "sheet 2 2025"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 5
+
+```{r}
+library(ellipse)
+
+file_path <- "https://raw.githubusercontent.com/AJCoca/SM19/master/"
+HousePrices <- read.csv(paste0(file_path, "HousePrices.csv"))
+HousePricesLM2 <- lm(Sale.price ~ Living.area + Property.tax, data = HousePrices)
+```
+
+$$
+\binom{\hat{\beta}_1}{\hat{\beta}_2} \approx N_2\left(\binom{\beta_1}{\beta_2}, \Sigma\right)
+$$
+
+This is a bi-variate normal distribution, so we use an ellipse to illustrate the distribution of $(\hat{\beta}_1, \hat{\beta}_2)$. The radius of the ellipse measures the distance of the confidence interval from the true values of $(\beta_1, \beta_2)$. Normalising to z-score: $$
+Z=\Sigma ^{-\frac{1}{2}}(\hat{\beta} - \beta)\sim N(0, I_2) ~,
+$$ so the radius is given by
+
+$$
+||Z||^2=(\hat{\beta} - \beta)^T \Sigma ^{-1}(\hat{\beta} - \beta) \sim ~\chi_2^2,
+$$ Therefore, the ($1-\alpha$)% CI of the bi-variate normal distribution should be an ellipse, $C$ that satisfies:
+
+$$
+C = \{ \hat{\beta} : (\hat{\beta} - \beta)^T \Sigma ^{-1}(\hat{\beta} - \beta) \leq \chi^2_{2, 1-\alpha}\}
+$$
+
+Now we plot this 95% CI ellipse, also add red horizontal vertical lines to indicate the 95% intervals for each of the predictors according to
+
+$$
+\hat{\beta}_j \sim N(\beta_j, \Sigma_{jj}) ~.
+$$
+
+Then, add blue horizontal and vertical lines to indicate the 97.5% intervals for each of the predictors. The region enclosed by the blue lines indicate the cuboid proved in question 2 example sheet 1.
+
+```{r plot, echo=FALSE}
+plot(ellipse(HousePricesLM2, c(2, 3)), type="l")
+ConfInts <- confint(HousePricesLM2)
+abline(h = ConfInts[3, 1], col="red")
+abline(h = ConfInts[3, 2], col="red")
+abline(v = ConfInts[2, 2], col="red")
+abline(v = ConfInts[2, 1], col="red")
+
+ConfInts2 <- confint(HousePricesLM2, level=0.975)
+abline(h = ConfInts2[3, 1], col="blue")
+abline(h = ConfInts2[3, 2], col="blue")
+abline(v = ConfInts2[2, 2], col="blue")
+abline(v = ConfInts2[2, 1], col="blue")
+```
+
+Interpretations of the plot:
+
+-   The tilted ellipse gives the exact 95% CI under the bivariate normal distribution for $(\hat{\beta}_1, \hat{\beta}_2)$.
+
+-   Red rectangle area describes marginal distribution of 95%, and blue rectangle area describes marginal distribution of 97.5%
+
+-   Red rectangle --\> $P(\beta_1\in CI_1(95\%) \cap \beta_2\in CI_2(95\%) )=0.95(0.05\rho+0.95) \leq 0.95$, so it undercovers the 95% CI for the bivariate distribution
+
+-   Blue rectangle --\> $P(\beta_1\in CI_1(97.5\%) \cap \beta_2\in CI_2(97.5\%) ) \geq 0.95$ as seen in example sheet 1, so overcovers the CI.
+
+correlation between the estimates of these coefficients
+
+```{r}
+summary(HousePricesLM2, correlation = TRUE)$correlation
+```
+
+correlation between the corresponding variables
+
+```{r}
+cor(HousePrices$Living.area, HousePrices$Property.tax)
+```
+
+The correlation seems reversed because the covariance matrix $\Sigma$ for $\binom{\hat{\beta}_1}{\hat{\beta}_2}$ is proportional to the inverse of the the covariance matrix for the two predictors, i.e. $$
+\Sigma \propto (X^TX)^{-1} \propto \bigl( \begin{smallmatrix}1 & \rho\\ \rho & 1\end{smallmatrix}\bigr)^{-1}=\bigl( \begin{smallmatrix}1 & -\rho\\ -\rho & 1\end{smallmatrix}\bigr)
+$$
+
+The two predictors are positively correlated so they share some common explanation for the variance in the target variable. Adjusting the fit for one of them will adversely affect the other one.
+
+## Question 6
+
+```{r}
+library(MASS)
+pairs(hills)
+attach(hills)
+```
+
+We noticed 2 outliers, now try to remove them by manually substracting 60:
+
+```{r}
+hills["Knock Hill", "time"] <- hills["Knock Hill", "time"] - 60
+hills["Bens of Jura", "time"] <- hills["Bens of Jura", "time"] - 60
+# attach(hills)
+pairs(hills)
+```
+
+We notice that the variance seems to change with the value of `hills$time`, therefore, we try to fix the hetereoscedasticity issue. In fact, it might well be reasonable to assume that the standard deviation of the winning time is proportional to the length of the race. Notice that if $Z \sim N(\mu, \sigma^2 \mu^2)$, then
+
+$$
+\log(Z)-\log(\mu) \approx \frac{1}{\mu}(Z-\mu) \sim N(0, \sigma^2 ) ~,
+$$ Then $\log(Z) \sim N(\log(\mu), \sigma^2)$ so we might want to take the logarithmic transformation here. Since all predictors must have positive values, taking logarithmic is feasible, and we don't expect it to go through the origin after the transformation so must also include an intercept term.
+
+For the first model, we use only the distance to predict time
+
+$$
+\log(Y_i) = \beta_0 + \beta_1 \log(X_{i1}) + \epsilon_i, ~~ \epsilon_i \sim N(0, \sigma^2)
+$$
+
+for $i=1, \dots , n$, and each $\epsilon_i \perp X_i$ and are iid.
+
+In R code, it is
+
+```{r}
+LinMod1 <- lm(log(time)~log(dist))
+summary(LinMod1)
+
+```
+
+```{r}
+par(mfrow = c(2, 2))   # 2 rows, 2 columns
+plot(LinMod1)
+par(mfrow = c(1, 1))  
+```
+
+Let's check some diagnostics plots, seems fine. Now lets see if we can improve the model by adding the climb predictor: $$
+\log(Y_i) = \beta_0 + \beta_1 \log(X_{i1}) +\beta_2 \log(X_{i2}) + \epsilon_i, ~~ \epsilon_i \sim N(0, \sigma^2)
+$$
+
+```{r}
+LinMod2 <- lm(log(time)~log(dist) + log(climb))
+summary(LinMod2)
+
+```
+
+```{r}
+
+par(mfrow = c(2, 2))   # 2 rows, 2 columns
+plot(LinMod2)
+par(mfrow = c(1, 1))  
+```
+
+Comparing two models, we see a decreased in residual standard error and increased $R^2$. We can also use the $F-$ test to confirm if the improvement is significant (if we can reject the null of $\beta_2=0$ with 95% confidence): $$
+F=\frac{(RSS_0-RSS_1)/(p-p_0)}{RSS_1/(n-p)} \sim F_{n-p, p-p_0}
+$$
+
+```{r}
+anova(LinMod1,LinMod2)
+```
+
+For prediction,
+
+```{r}
+Newdata <- data.frame(dist=5.3, climb=1100)
+predict.lm(LinMod2, Newdata, interval="prediction", level=0.95)
+```
+
+```{r}
+Newdata <- data.frame(dist=5.3, climb=1100)
+predict.lm(LinMod1, Newdata, interval="prediction", level=0.95)
+```
+
+Note that we need to transform back to the original scale, so the predicted time is $\exp{(3.613)} \approx 37$ minutes, and the CI would just be taking the exp on both ends. Comparing the two predictions, we see a similar estimate, but with a wider prediction interval. This agrees with intuition that the extra piece of information (the climb) should enable us to predict with greater precision.
+
+## Question 7(b)
+
+```{r}
+data(mammals)
+LM <- lm(log(brain) ~ log(body), data = mammals)
+pf((rstudent(LM)["Human"])^2, 1, nrow(mammals) - 2 - 1, lower.tail = FALSE)
+
+```
+
+## Question 9
+
+### (c) Lets first define `mylm`, a regular OLS with one stage least square.
+
+```{r}
+mylm <- function(X, Y, S0 = NULL) {
+  n <- nrow(X); p <- ncol(X)
+
+  XtX <- t(X) %*% X
+  XtY <- t(X) %*% Y
+  beta_hat <- solve(XtX, XtY)
+  fitted <- X %*% beta_hat
+  resid  <- Y - fitted
+  RSS    <- sum(resid^2)
+  sigma2_hat <- RSS / (n - p)
+  vcov_beta <- sigma2_hat * solve(XtX)
+  se_beta   <- sqrt(diag(vcov_beta))
+  t_vals    <- as.vector(beta_hat) / se_beta
+  p_vals    <- 2 * pt(-abs(t_vals), df = n - p)
+
+  out <- list(
+    coef = as.vector(beta_hat),
+    se   = se_beta,
+    t    = t_vals,
+    p    = p_vals,
+    sigma = sqrt(sigma2_hat),
+    df = n - p,
+    residuals = resid,
+    fitted = fitted,
+    RSS = RSS
+  )
+  out
+}
+
+```
+
+Now, we add an extra input for the two-stage `mylm` so that it takes in the predictor of $Z$. Define the new $\hat{X}=P_Z X$ and the rest is the same.
+
+```{r}
+mylm_TSLS <- function(X, Y, Z, S0 = NULL) {
+  n <- nrow(X); p <- ncol(X)
+  
+  ZtZ <- t(Z) %*% Z
+  PZ  <- Z %*% solve(ZtZ, t(Z))
+  X_TSLS <- PZ %*% X      
+
+  XtX <- t(X_TSLS) %*% X_TSLS
+  XtY <- t(X_TSLS) %*% Y
+  beta_hat <- solve(XtX, XtY)
+  fitted <- X_TSLS %*% beta_hat
+  resid  <- Y - fitted
+  RSS    <- sum(resid^2)
+  sigma2_hat <- RSS / (n - p)
+  vcov_beta <- sigma2_hat * solve(XtX)
+  se_beta   <- sqrt(diag(vcov_beta))
+  t_vals    <- as.vector(beta_hat) / se_beta
+  p_vals    <- 2 * pt(-abs(t_vals), df = n - p)
+
+  list(
+    coef = as.vector(beta_hat),
+    se   = se_beta,
+    t    = t_vals,
+    p    = p_vals,
+    sigma = sqrt(sigma2_hat),
+    df = n - p,
+    residuals = resid,
+    fitted = fitted,
+    RSS = RSS,
+    TSLS = TRUE
+  )
+}
+```
+
+Now we ran 1000 simulations for each and compare the asymptotic behaviors.
+
+```{r}
+simulation <- function(n, alpha_true = 1, beta_true = 0.5) {
+  Z   <- rnorm(n)     # instrument
+  v   <- rnorm(n)     # noises from measurement of X, also in Y's error
+  eps <- rnorm(n)     # extra noise in Y
+  
+  X <- Z + v
+  u <- v + eps
+  Y <- alpha_true + beta_true * X + u
+  
+  Xmat <- cbind(1, X)  # intercept + X
+  Zmat <- cbind(1, Z)  # intercept + Z
+  
+  beta_OLS  <- mylm(Xmat, Y)$coef[2]
+  beta_TSLS <- mylm_TSLS(Xmat, Y, Zmat)$coef[2]
+  
+  c(beta_OLS = beta_OLS, beta_TSLS = beta_TSLS)
+}
+
+run_for_n <- function(n, B = 1000, alpha_true = 1, beta_true = 0.5) {
+  out <- t(replicate(B, simulation(n, alpha_true, beta_true)))
+  
+  data.frame(
+    n          = n,
+    mean_OLS   = mean(out[, "beta_OLS"]),
+    mean_TSLS  = mean(out[, "beta_TSLS"]),
+    var_OLS    = var(out[, "beta_OLS"]),
+    var_TSLS   = var(out[, "beta_TSLS"]),
+    bias_OLS   = mean(out[, "beta_OLS"])  - beta_true,
+    bias_TSLS  = mean(out[, "beta_TSLS"]) - beta_true
+  )
+}
+
+set.seed(123)
+
+ns <- c(100, 500, 2000)
+results <- do.call(rbind, lapply(ns, run_for_n))
+results
+```
+
+Observations: - OLS give bias estimates - TSLS converges to the true value - TSLS has higher variance (why?)
+
+Therefore, we use TSLS when the predictor is correlated with the error term. So we use another predictor $Z$ that can predict $X$ but is uncorrelated with the error, projection removes the part of $X$ that is correlated with the error term. TSLS estimates have higher variance because the reduced variance in the predictor of $\hat{X}$ compared to the raw $X$.
+
+## Question 11
+
+```{r}
+simulation <- function() {
+n <- 100
+X <- rnorm(n)
+Y <- 1 + 0.5 * X + sqrt(2 + X^2) * rnorm(n)
+fit1 <- lm(Y ~ X)
+weights <- pmax(0, 1 / fitted(lm(I(residuals(fit1)^2) ~ I(X^2))))
+fit2 <- lm(Y ~ X, weights = weights)
+c(coef(fit1)[2], coef(fit2)[2])
+}
+out <- t(replicate(1000, simulation()))
+summary(out)
+
+```
+
+```{r}
+var(out[, 2]) / var(out[, 1])
+```
+
+We conclude that both OLS and WLS are unbiased, but the variance of WLS is 89% of that of OLS. In the case of heteroskedasticity, WLS is BLUE!
